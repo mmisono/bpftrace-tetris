@@ -1,0 +1,228 @@
+// This is based on stapgames' tetris.spt made by Tomoki Sekiyama.
+// The license is the same as the original.
+//
+// Copyright (C) 2019 Masanori Misono <m.misono760@gmail.com>
+//
+// This file is free software and is distributed under the terms of the GNU
+// General Public License (GPL); either version 2, or (at your option) any
+// later version.
+
+#include <linux/tty.h>
+
+kprobe:pty_write // (struct tty_struct *tty, const unsigned char *buf, int c)
+/ arg2 == 1 /
+{
+  // this value is ascii code
+  @K = *((int8*)arg1);
+}
+
+// row = 20
+// column = 12
+// @B: blocks
+// @Z[0:240]: board
+//    -1: empty
+//     0: O
+//     1: L
+//     2: J
+//     3: S
+//     4: Z
+//     5: T
+//     6: I
+//     7: wall
+// @Z[240:480]: display buffer
+// @h: current position
+// @t: current block
+// @K: pressed key
+// @P: points
+
+BEGIN {
+  @K = 0;
+  @e = 0;
+  @P = 0;
+  @t = elapsed % 7;
+
+  // Create blocks
+  // block is represented by the position from the center.
+  // Every block has "L" part in the center except for a bar.
+  @B[0,0] = -11; // non-"L" part for each block
+  @B[1,0] = -24;
+  @B[2,0] = 2;
+  @B[3,0] = 13;
+  @B[4,0] = -13;
+  @B[5,0] = -1;
+  @B[6,0] = 2;
+  $i = 0;
+  unroll(7) {
+    // common "L" part
+    @B[$i,1]=0;
+    @B[$i,2]=1;
+    @B[$i,3]=-12;
+    $i = $i + 1;
+  }
+  @B[6,3] = -1; // bar is not common
+  // Position: 1 row has 12 columns, and (x,y) is represented by h=x+y*12.
+  @h=17; // First block position (center)
+
+  // bpftrace supports unrolling at most 20 loops
+  $i = 0;
+  unroll(20) {
+    $j = $i*12;
+    unroll(12) {
+      if ((($j+1) % 12) < 2 || (($j+1) > 228)) { @Z[$j] = 7; @Z[$j+240] = 7; }
+      else { @Z[$j] = -1; @Z[$j+240] = -1; }
+      $j += 1;
+    }
+    $i += 1;
+  }
+  printf("\033[H\033[2J"); // clear screen
+}
+
+interval:ms:99
+{
+  $f = 0; // move/rotate flag
+
+  if (@K != 0){ // if key is pressed
+   if (@K != 0x20){ // move left or right ('h' or 'l')
+     $d = @K-0x68 ? @K-0x6C ? 0 : 1 : -1; // d: movement direction
+     $i = 0;
+     unroll(4){ // check if the block can be moved
+       $f += @Z[@h+@B[@t,$i]+$d] >= 0; // destination is free
+       $i += 1;
+     }
+     if ($f == 0) {
+       @h = @h + $d; // move if destinations of every block are free
+     }
+   } else { // rotate (space = 0x20)
+     $i = 0;
+     unroll(4){ // check if block can be rotated
+       $p = @B[@t,$i]; // each block position
+       $v = ($p*2+252)/24-10; // destination x pos(p/12 rounded)
+       $w = $p-$v*12; // destination y pos
+       @C[$i] = $w*12-$v; // destination position
+
+       if (@Z[@h+@C[$i]] >= 0){ // check if destination is free
+         $f = 1;
+       }
+       $i += 1;
+     }
+
+     if (@t && ($f == 0)){ // rotate if destinations of every block are free
+       $i = 0;
+       unroll(4){
+         @B[@t,$i] = @C[$i];
+         $i += 1;
+       }
+     }
+   } }
+  @K = 0; // clear the input key
+
+  $i = 0;
+  $f = 0;
+  unroll(4){ // drop 1 row
+   $p = @h+@B[@t,$i];
+   $f += @Z[12+$p] >= 0; // check if destination is free
+   if ((240 + $p) >= 240){
+     @Z[240+$p] = @t; // copy the moving block to display buffer
+   }
+   $i += 1;
+  }
+
+  @e = 1 - @e;
+  if (@e){
+    if ($f){ // the block can't drop anymore
+      $i = 0;
+      unroll(4){
+        @Z[@h+@B[@t,$i]] = @t; // fix the block
+        $i += 1;
+      }
+      @t = elapsed % 7; // determin the next block
+      @h = 17; // make the block to initial position
+    } else {
+      @h += 12; // drop the block 1 row
+    }
+  }
+
+  // check if line is filled
+  $k = 1; $l=18; $i = 18;
+  unroll(19){
+    $j = 10; $f = 0;
+    unroll(10){
+      $f += @Z[$i*12 + $j] >= 0;
+      $j -= 1;
+    }
+    if ($f == 10){ // filled!
+      @P += $k;
+      $k += 1;
+    } else {
+      @C[$l] = $i;
+      $l -= 1;
+    }
+    $i -= 1;
+  }
+
+  // drop block
+  $i = 18;
+  unroll(19){
+    $j = 10;
+    unroll(10){
+      if ($i < $l){
+        @Z[$i*12 + $j] = -1;
+      } else {
+        @Z[$i*12 + $j] = @Z[@C[$i]*12 + $j];
+      }
+      $j -= 1;
+    }
+    $i -= 1;
+  }
+
+  $i = 0;
+  printf("\033[H"); // move cursor to top left
+  printf("\n");
+  unroll(20){
+    $j = $i*12;
+    printf("  ");
+    unroll(12){
+      $v = @Z[240+$j];
+      if($v == -1){
+        printf("  ");
+      }
+      if ($v == 0){
+        printf("\033[41m  \033[m");
+      }
+      if ($v == 1){
+        printf("\033[42m  \033[m");
+      }
+      if ($v == 2){
+        printf("\033[43m  \033[m");
+      }
+      if ($v == 3){
+        printf("\033[44m  \033[m");
+      }
+      if ($v == 4){
+        printf("\033[45m  \033[m");
+      }
+      if ($v == 5){
+        printf("\033[46m  \033[m");
+      }
+      if ($v == 6){
+        printf("\033[47m  \033[m");
+      }
+      if ($v == 7){
+        printf("\033[47m  \033[m");
+      }
+      if ((($j % 12) -11) == 0){
+        printf("\n");
+      }
+      @Z[240+$j] = @Z[$j]; // clear the display buffer
+      $j += 1;
+    }
+    $i += 1;
+  }
+  printf("Move:  h,l  | Rotate: <Space>\n");
+  printf("Quit: <C-c> | Score : %d\n", @P);
+
+  if (@Z[5] != -1){
+    exit(); // exit if there are block at initial position
+  }
+}
+
