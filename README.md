@@ -7,7 +7,7 @@ This is the ported version of [tetris.spt](https://github.com/mhiramat/stapgames
 ## Requirements
 - Linux 5.3+
 - [bcc](https://github.com/iovisor/bcc) master branch version
-- [bpftrace](https://github.com/iovisor/bpftrace) [this branch](https://github.com/mmisono/bpftrace/tree/escape_sequences)
+- [bpftrace](https://github.com/iovisor/bpftrace) master branch version
 
 ## How to run
 - `./run.sh`
