@@ -226,3 +226,8 @@ interval:ms:99
   }
 }
 
+END
+{
+  clear(@B); clear(@C); clear(@K); clear(@P);
+  clear(@Z); clear(@e); clear(@h); clear(@t);
+}
