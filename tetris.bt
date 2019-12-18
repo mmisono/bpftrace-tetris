@@ -7,8 +7,6 @@
 // General Public License (GPL); either version 2, or (at your option) any
 // later version.
 
-#include <linux/tty.h>
-
 kprobe:pty_write // (struct tty_struct *tty, const unsigned char *buf, int c)
 / arg2 == 1 /
 {
