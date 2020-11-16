@@ -37,7 +37,7 @@ BEGIN {
   @K = 0;
   @e = 0;
   @P = 0;
-  @t = elapsed % 7;
+  @t = rand % 7;
 
   // Create blocks
   // block is represented by the position from the center.
