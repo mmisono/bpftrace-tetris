@@ -3,3 +3,6 @@
 *.pyc
 __pycache__/
 .mypy_cache/
+.vagrant
+*.log
+bpftrace
