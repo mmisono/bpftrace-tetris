@@ -24,13 +24,12 @@ Install both, then run:
 
 ```
 vagrant plugin install vagrant-vbguest
-vagrant up
 ```
 
 You can then run tetris with:
 
 ```
-vagrant ssh -c "cd /vagrant/ && ./run.sh"
+./run-in-vagrant.sh
 ```
 
 ## FAQ
