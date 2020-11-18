@@ -32,6 +32,14 @@ You can then run tetris with:
 ./run-in-vagrant.sh
 ```
 
+### In Docker
+
+```
+./run-in-docker.sh
+```
+
+Note that this also run with a recent Docker Desktop for Mac.
+
 ## FAQ
 
 ### Q. Why is Linux 5.3+ required?
